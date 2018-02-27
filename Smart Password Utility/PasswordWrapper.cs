@@ -12,12 +12,19 @@ using System.Threading.Tasks;
 
 namespace Smart_Password_Utility
 {
-
+    /// <summary>
+    /// Wrapper class around the password management functions
+    /// </summary>
     class PasswordWrapper
     {
+        /// <summary>
+        /// URL to access the pwnedpasswords API
+        /// </summary>
         private const string API_URL = "https://api.pwnedpasswords.com/range/{0}";
 
-        /// #define NET_API_STATUS DWORD
+        /// <summary>
+        /// Some common enums to translate error numbers to a slightly more useful message. 
+        /// TODO: This could be made much more user friendly still.
         /// </summary>
         public enum NET_API_STATUS : uint
         {
@@ -31,7 +38,7 @@ namespace Smart_Password_Utility
             NERR_UserNotFound = 2221,
             ERROR_ACCESS_DENIED = 5,
             ERROR_NOT_ENOUGH_MEMORY = 8,
-            ERROR_INVALID_PASSWORD = 86,
+            ERROR_INVALID_OLD_PASSWORD = 86,
             ERROR_INVALID_PARAMETER = 87,
             ERROR_INVALID_NAME = 123,
             ERROR_INVALID_LEVEL = 124,
@@ -41,27 +48,44 @@ namespace Smart_Password_Utility
             RPC_E_REMOTE_DISABLED = 2147549468
         }
 
+        //TODO: Add method to change password without old password if user executing has proper privs.
+        /// <summary>
+        /// Pinvokes to change passwords
+        /// </summary>
+        /// <param name="domainname">Domain name of the target user</param>
+        /// <param name="username">Username to change password on</param>
+        /// <param name="oldpassword">Users old password</param>
+        /// <param name="newpassword">Password with which to replace the users current password</param>
+        /// <returns></returns>
         [DllImport("netapi32.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
         public static extern NET_API_STATUS NetUserChangePassword([MarshalAs(UnmanagedType.LPWStr)] string domainname, [MarshalAs(UnmanagedType.LPWStr)] string username,
                                                                   [MarshalAs(UnmanagedType.LPWStr)] string oldpassword,[MarshalAs(UnmanagedType.LPWStr)] string newpassword);
 
-        [DllImport("msvcrt.dll", CallingConvention = CallingConvention.Cdecl)]
-        private static extern int memcmp(byte[] b1, byte[] b2, UIntPtr count);
+        [DllImport("netapi32.dll", CharSet = CharSet.Unicode, CallingConvention = CallingConvention.StdCall, SetLastError = true)]
+        public static extern NET_API_STATUS NetUserChangePassword([MarshalAs(UnmanagedType.LPWStr)] string domainname, [MarshalAs(UnmanagedType.LPWStr)] string username,
+                                                                  IntPtr oldpassword, IntPtr newpassword);
 
+        /// <summary>
+        /// Constructor
+        /// </summary>
         static PasswordWrapper()
         {
             ServicePointManager.Expect100Continue = true;
             ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
         }
 
-        public static int CheckIsPasswordPwned(string password)
+        /// <summary>
+        /// Function to check if the password is in the pwned passwords database using the k-anonymity method.
+        /// </summary>
+        /// <param name="hash">Full SHA1 hash of the password (only the first 5 chars are sent to the internet)</param>
+        /// <returns>count of how many times the password was found</returns>
+        public static int CheckIsPasswordPwned(string hash)
         {
             int count = 0;
             try
             {
-                string passwordHash = GetSHA1Hash(password);
-                string prefix = passwordHash.Substring(0, 5);
-                string suffix = passwordHash.Substring(5);
+                string prefix = hash.Substring(0, 5);
+                string suffix = hash.Substring(5);
                 Dictionary<string, int> results = QueryPwnedPasswordsAPI(prefix).GetAwaiter().GetResult();
                 if (results.ContainsKey(suffix))
                 {
@@ -77,7 +101,12 @@ namespace Smart_Password_Utility
             }
         }
 
-        private static string GetSHA1Hash(string password)
+        /// <summary>
+        /// Helper function to get a SHA1 hash of a string
+        /// </summary>
+        /// <param name="password">password as a string</param>
+        /// <returns>hex string of SHA1 hash</returns>
+        public static string GetSHA1Hash(string password)
         {
             using (SHA1Managed hasher = new SHA1Managed())
             {
@@ -86,6 +115,11 @@ namespace Smart_Password_Utility
             }
         }
 
+        /// <summary>
+        /// Helper to perform the acutal query
+        /// </summary>
+        /// <param name="prefix">first 5 chars of the SHA1 hash</param>
+        /// <returns>A dictionary of results that start with that prefix and a count of how many times each has been seen</returns>
         private static async Task<Dictionary<string, int>> QueryPwnedPasswordsAPI(string prefix)
         {
             string url = API_URL.Replace("{0}", prefix);
@@ -105,45 +139,6 @@ namespace Smart_Password_Utility
                 results.Add(parts[0], int.Parse(parts[1]));
             }
             return results;
-        }
-
-        public static bool SecureStringsMatch(SecureString s1, SecureString s2)
-        {
-            if (s1 == s2) return true; //reference equality check
-
-            if (s1 == null || s2 == null || s1.Length != s2.Length) return false;
-            IntPtr bstr1 = IntPtr.Zero;
-            IntPtr bstr2 = IntPtr.Zero;
-            try
-            {
-                bstr1 = Marshal.SecureStringToBSTR(s1);
-                bstr2 = Marshal.SecureStringToBSTR(s2);
-                byte b1 = 1;
-                byte b2 = 1;
-                int i = 0;
-                while (((char)b1) != '\0')
-                {
-                    b1 = Marshal.ReadByte(bstr1, i);
-                    b2 = Marshal.ReadByte(bstr2, i);
-                    if (b1 != b2)
-                    {
-                        return false;
-                    }
-                    i += 2;
-                }
-                return true;
-            }
-            finally
-            {
-                if (bstr1 != IntPtr.Zero)
-                {
-                    Marshal.ZeroFreeBSTR(bstr1);
-                }
-                if (bstr2 != IntPtr.Zero)
-                {
-                    Marshal.ZeroFreeBSTR(bstr2);
-                }
-            }
         }
     }
 }
