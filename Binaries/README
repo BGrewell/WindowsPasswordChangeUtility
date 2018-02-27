@@ -1,0 +1,4 @@
+Simply run the executable (you can also pass a differnt username and optionally domain 
+by adding it as an argument in the format domain\username. 
+
+chpass.exe or chpass.exe domain\username
