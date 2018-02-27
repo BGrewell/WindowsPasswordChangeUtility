@@ -1,4 +1,7 @@
-Simply run the executable (you can also pass a differnt username and optionally domain 
-by adding it as an argument in the format domain\username. 
+Simply run the executable. (you can also pass a differnt username and optionally domain by 
+adding it as an argument in the format domain\username) you will be prompted for your old password
+then asked for the new password which will be checked by sending the first 5 characters of the SHA1 hash to
+the PwnedPasswords API and checking the rest internally against the results returned. If the password hasn't
+been found you will be asked to confirm it and the password will then be changed if the old password matches.
 
 chpass.exe or chpass.exe domain\username
